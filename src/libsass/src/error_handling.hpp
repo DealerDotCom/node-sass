@@ -5,6 +5,8 @@
 #include <sstream>
 #include <stdexcept>
 #include "position.hpp"
+#include "ast_fwd_decl.hpp"
+#include "sass/functions.h"
 
 namespace Sass {
 
@@ -64,6 +66,15 @@ namespace Sass {
       public:
         InvalidArgumentType(ParserState pstate, std::string fn, std::string arg, std::string type, const Value_Ptr value = 0);
         virtual ~InvalidArgumentType() throw() {};
+    };
+
+    class InvalidVarKwdType : public Base {
+      protected:
+        std::string name;
+        const Argument_Ptr arg;
+      public:
+        InvalidVarKwdType(ParserState pstate, std::string name, const Argument_Ptr arg = 0);
+        virtual ~InvalidVarKwdType() throw() {};
     };
 
     class InvalidSyntax : public Base {
@@ -136,10 +147,11 @@ namespace Sass {
 
     class IncompatibleUnits : public OperationError {
       protected:
-        const Number& lhs;
-        const Number& rhs;
+        // const Sass::UnitType lhs;
+        // const Sass::UnitType rhs;
       public:
         IncompatibleUnits(const Number& lhs, const Number& rhs);
+        IncompatibleUnits(const UnitType lhs, const UnitType rhs);
         virtual ~IncompatibleUnits() throw() {};
     };
 
@@ -183,7 +195,7 @@ namespace Sass {
   void warn(std::string msg, ParserState pstate, Backtrace* bt);
 
   void deprecated_function(std::string msg, ParserState pstate);
-  void deprecated(std::string msg, std::string msg2, ParserState pstate);
+  void deprecated(std::string msg, std::string msg2, bool with_column, ParserState pstate);
   void deprecated_bind(std::string msg, ParserState pstate);
   // void deprecated(std::string msg, ParserState pstate, Backtrace* bt);
 

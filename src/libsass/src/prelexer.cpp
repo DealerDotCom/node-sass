@@ -437,6 +437,10 @@ namespace Sass {
         optional <
           sequence <
           exactly <'/'>,
+          negate < sequence <
+            exactly < calc_fn_kwd >,
+            exactly < '(' >
+          > >,
           multiple_units
         > >
       >(src);
@@ -576,7 +580,7 @@ namespace Sass {
     const char* value_combinations(const char* src) {
       // `2px-2px` is invalid combo
       bool was_number = false;
-      const char* pos = src;
+      const char* pos;
       while (src) {
         if ((pos = alternatives < quoted_string, identifier, percentage, hex >(src))) {
           was_number = false;
@@ -1036,7 +1040,7 @@ namespace Sass {
     const char* hexa(const char* src) {
       const char* p = sequence< exactly<'#'>, one_plus<xdigit> >(src);
       ptrdiff_t len = p - src;
-      return (len != 4 && len != 7 && len != 9) ? 0 : p;
+      return (len != 5 && len != 9) ? 0 : p;
     }
     const char* hex0(const char* src) {
       const char* p = sequence< exactly<'0'>, exactly<'x'>, one_plus<xdigit> >(src);
@@ -1268,7 +1272,7 @@ namespace Sass {
             optional_css_whitespace,
             exactly<'='>,
             optional_css_whitespace,
-            alternatives< variable, identifier_schema, identifier, quoted_string, number, hexa >,
+            alternatives< variable, identifier_schema, identifier, quoted_string, number, hex, hexa >,
             zero_plus< sequence<
               optional_css_whitespace,
               exactly<','>,
@@ -1278,7 +1282,7 @@ namespace Sass {
                 optional_css_whitespace,
                 exactly<'='>,
                 optional_css_whitespace,
-                alternatives< variable, identifier_schema, identifier, quoted_string, number, hexa >
+                alternatives< variable, identifier_schema, identifier, quoted_string, number, hex, hexa >
               >
             > >
           > >,
@@ -1313,6 +1317,7 @@ namespace Sass {
           identifier,
           quoted_string,
           number,
+          hex,
           hexa,
           sequence <
             exactly < '(' >,
@@ -1599,7 +1604,7 @@ namespace Sass {
             class_char < selector_lookahead_ops >,
             // match selector combinators /[>+~]/
             class_char < selector_combinator_ops >,
-            // match attribute compare operators
+            // match pseudo selectors
             sequence <
               exactly <'('>,
               optional_spaces,
@@ -1607,6 +1612,7 @@ namespace Sass {
               optional_spaces,
               exactly <')'>
             >,
+            // match attribute compare operators
             alternatives <
               exact_match, class_match, dash_match,
               prefix_match, suffix_match, substring_match
@@ -1625,12 +1631,21 @@ namespace Sass {
                 // class match
                 exactly <'.'>,
                 // single or double colon
-                optional < pseudo_prefix >
+                sequence <
+                  optional < pseudo_prefix >,
+                  // fix libsass issue 2376
+                  negate < exactly < url_kwd > >
+                >
               >,
               // accept hypens in token
               one_plus < sequence <
                 // can start with hyphens
-                zero_plus < exactly<'-'> >,
+                zero_plus <
+                  sequence <
+                    exactly <'-'>,
+                    optional_spaces
+                  >
+                >,
                 // now the main token
                 alternatives <
                   kwd_optional,

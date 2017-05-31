@@ -15,7 +15,7 @@
 
 namespace Sass {
 
-  Inspect::Inspect(Emitter emi)
+  Inspect::Inspect(const Emitter& emi)
   : Emitter(emi)
   { }
   Inspect::~Inspect() { }
@@ -354,6 +354,8 @@ namespace Sass {
       if (items_output) append_comma_separator();
       key->perform(this);
       append_colon_separator();
+      LOCAL_FLAG(in_space_array, true);
+      LOCAL_FLAG(in_comma_array, true);
       map->at(key)->perform(this);
       items_output = true;
     }
@@ -495,8 +497,9 @@ namespace Sass {
 
   void Inspect::operator()(Unary_Expression_Ptr expr)
   {
-    if (expr->optype() == Unary_Expression::PLUS) append_string("+");
-    else                                          append_string("-");
+    if (expr->optype() == Unary_Expression::PLUS)       append_string("+");
+    else if (expr->optype() == Unary_Expression::SLASH) append_string("/");
+    else                                                append_string("-");
     expr->operand()->perform(this);
   }
 
@@ -515,11 +518,6 @@ namespace Sass {
   void Inspect::operator()(Variable_Ptr var)
   {
     append_token(var->name(), var);
-  }
-
-  void Inspect::operator()(Textual_Ptr txt)
-  {
-    append_token(txt->value(), txt);
   }
 
   void Inspect::operator()(Number_Ptr n)
@@ -961,18 +959,31 @@ namespace Sass {
     }
   }
 
+  // hotfix to avoid invalid nested `:not` selectors
+  // probably the wrong place, but this should ultimatively
+  // be fixed by implement superselector correctly for `:not`
+  // first use of "find" (ATM only implemented for selectors)
+  bool hasNotSelector(AST_Node_Obj obj) {
+    if (Wrapped_Selector_Ptr w = Cast<Wrapped_Selector>(obj)) {
+      return w->name() == ":not";
+    }
+    return false;
+  }
+
   void Inspect::operator()(Wrapped_Selector_Ptr s)
   {
-    bool was = in_wrapped;
-    in_wrapped = true;
-    append_token(s->name(), s);
-    append_string("(");
-    bool was_comma_array = in_comma_array;
-    in_comma_array = false;
-    s->selector()->perform(this);
-    in_comma_array = was_comma_array;
-    append_string(")");
-    in_wrapped = was;
+    if (!s->selector()->find(hasNotSelector)) {
+      bool was = in_wrapped;
+      in_wrapped = true;
+      append_token(s->name(), s);
+      append_string("(");
+      bool was_comma_array = in_comma_array;
+      in_comma_array = false;
+      s->selector()->perform(this);
+      in_comma_array = was_comma_array;
+      append_string(")");
+      in_wrapped = was;
+    }
   }
 
   void Inspect::operator()(Compound_Selector_Ptr s)
@@ -1038,6 +1049,7 @@ namespace Sass {
         if (tail) append_mandatory_space();
         else append_optional_space();
       break;
+      default: break;
     }
     if (tail && comb != Complex_Selector::ANCESTOR_OF) {
       if (c->has_line_break()) append_optional_linefeed();

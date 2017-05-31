@@ -184,7 +184,9 @@ namespace Sass {
       std::string exp_src = exp->to_string(ctx.c_options);
       Selector_List_Obj sel_list = Parser::parse_selector(exp_src.c_str(), ctx);
       if (sel_list->length() == 0) return NULL;
-      return sel_list->first()->tail()->head();
+      Complex_Selector_Obj first = sel_list->first();
+      if (!first->tail()) return first->head();
+      return first->tail()->head();
     }
 
     #ifdef __MINGW32__
@@ -243,9 +245,35 @@ namespace Sass {
       }
     }
 
+    inline bool special_number(String_Constant_Ptr s) {
+      if (s) {
+        std::string calc("calc");
+        std::string var("var");
+        std::string ss(s->value());
+        return std::equal(calc.begin(), calc.end(), ss.begin()) ||
+               std::equal(var.begin(), var.end(), ss.begin());
+      }
+      return false;
+    }
+
     Signature rgb_sig = "rgb($red, $green, $blue)";
     BUILT_IN(rgb)
     {
+      if (
+        special_number(Cast<String_Constant>(env["$red"])) ||
+        special_number(Cast<String_Constant>(env["$green"])) ||
+        special_number(Cast<String_Constant>(env["$blue"]))
+      ) {
+        return SASS_MEMORY_NEW(String_Constant, pstate, "rgb("
+                                                        + env["$red"]->to_string()
+                                                        + ", "
+                                                        + env["$green"]->to_string()
+                                                        + ", "
+                                                        + env["$blue"]->to_string()
+                                                        + ")"
+        );
+      }
+
       return SASS_MEMORY_NEW(Color,
                              pstate,
                              color_num(ARG("$red",   Number)),
@@ -256,6 +284,24 @@ namespace Sass {
     Signature rgba_4_sig = "rgba($red, $green, $blue, $alpha)";
     BUILT_IN(rgba_4)
     {
+      if (
+        special_number(Cast<String_Constant>(env["$red"])) ||
+        special_number(Cast<String_Constant>(env["$green"])) ||
+        special_number(Cast<String_Constant>(env["$blue"])) ||
+        special_number(Cast<String_Constant>(env["$alpha"]))
+      ) {
+        return SASS_MEMORY_NEW(String_Constant, pstate, "rgba("
+                                                        + env["$red"]->to_string()
+                                                        + ", "
+                                                        + env["$green"]->to_string()
+                                                        + ", "
+                                                        + env["$blue"]->to_string()
+                                                        + ", "
+                                                        + env["$alpha"]->to_string()
+                                                        + ")"
+        );
+      }
+
       return SASS_MEMORY_NEW(Color,
                              pstate,
                              color_num(ARG("$red",   Number)),
@@ -268,6 +314,20 @@ namespace Sass {
     BUILT_IN(rgba_2)
     {
       Color_Ptr c_arg = ARG("$color", Color);
+
+      if (
+        special_number(Cast<String_Constant>(env["$alpha"]))
+      ) {
+        std::stringstream strm;
+        strm << "rgba("
+                 << (int)c_arg->r() << ", "
+                 << (int)c_arg->g() << ", "
+                 << (int)c_arg->b() << ", "
+                 << env["$alpha"]->to_string()
+             << ")";
+        return SASS_MEMORY_NEW(String_Constant, pstate, strm.str());
+      }
+
       Color_Ptr new_c = SASS_MEMORY_COPY(c_arg);
       new_c->a(alpha_num(ARG("$alpha", Number)));
       new_c->disp("");
@@ -328,7 +388,9 @@ namespace Sass {
       double min = std::min(r, std::min(g, b));
       double delta = max - min;
 
-      double h = 0, s = 0, l = (max + min) / 2.0;
+      double h = 0;
+      double s;
+      double l = (max + min) / 2.0;
 
       if (max == min) {
         h = s = 0; // achromatic
@@ -395,6 +457,21 @@ namespace Sass {
     Signature hsl_sig = "hsl($hue, $saturation, $lightness)";
     BUILT_IN(hsl)
     {
+      if (
+        special_number(Cast<String_Constant>(env["$hue"])) ||
+        special_number(Cast<String_Constant>(env["$saturation"])) ||
+        special_number(Cast<String_Constant>(env["$lightness"]))
+      ) {
+        return SASS_MEMORY_NEW(String_Constant, pstate, "hsl("
+                                                        + env["$hue"]->to_string()
+                                                        + ", "
+                                                        + env["$saturation"]->to_string()
+                                                        + ", "
+                                                        + env["$lightness"]->to_string()
+                                                        + ")"
+        );
+      }
+
       return hsla_impl(ARG("$hue", Number)->value(),
                        ARG("$saturation", Number)->value(),
                        ARG("$lightness",  Number)->value(),
@@ -406,6 +483,24 @@ namespace Sass {
     Signature hsla_sig = "hsla($hue, $saturation, $lightness, $alpha)";
     BUILT_IN(hsla)
     {
+      if (
+        special_number(Cast<String_Constant>(env["$hue"])) ||
+        special_number(Cast<String_Constant>(env["$saturation"])) ||
+        special_number(Cast<String_Constant>(env["$lightness"])) ||
+        special_number(Cast<String_Constant>(env["$alpha"]))
+      ) {
+        return SASS_MEMORY_NEW(String_Constant, pstate, "hsla("
+                                                        + env["$hue"]->to_string()
+                                                        + ", "
+                                                        + env["$saturation"]->to_string()
+                                                        + ", "
+                                                        + env["$lightness"]->to_string()
+                                                        + ", "
+                                                        + env["$alpha"]->to_string()
+                                                        + ")"
+        );
+      }
+
       return hsla_impl(ARG("$hue", Number)->value(),
                        ARG("$saturation", Number)->value(),
                        ARG("$lightness",  Number)->value(),
@@ -774,7 +869,7 @@ namespace Sass {
         return hsla_impl(hsl_struct.h, hsl_struct.s, hsl_struct.l, alpha, ctx, pstate);
       }
       if (a) {
-        double ascale = (a ? ARGR("$alpha", Number, -100.0, 100.0)->value() : 0.0) / 100.0;
+        double ascale = (ARGR("$alpha", Number, -100.0, 100.0)->value()) / 100.0;
         return SASS_MEMORY_NEW(Color,
                                pstate,
                                color->r(),
@@ -822,7 +917,7 @@ namespace Sass {
         return hsla_impl(hsl_struct.h, hsl_struct.s, hsl_struct.l, alpha, ctx, pstate);
       }
       if (a) {
-        double alpha = a ? ARGR("$alpha", Number, 0, 1.0)->value() : color->a();
+        double alpha = ARGR("$alpha", Number, 0, 1.0)->value();
         return SASS_MEMORY_NEW(Color,
                                pstate,
                                color->r(),
@@ -1189,19 +1284,19 @@ namespace Sass {
       Number_Ptr l = Cast<Number>(arg);
       Boolean_Ptr b = Cast<Boolean>(arg);
       if (l) {
-        double v = l->value();
-        if (v < 1) {
+        double lv = l->value();
+        if (lv < 1) {
           stringstream err;
-          err << "$limit " << v << " must be greater than or equal to 1 for `random'";
+          err << "$limit " << lv << " must be greater than or equal to 1 for `random'";
           error(err.str(), pstate);
         }
-        bool eq_int = std::fabs(trunc(v) - v) < NUMBER_EPSILON;
+        bool eq_int = std::fabs(trunc(lv) - lv) < NUMBER_EPSILON;
         if (!eq_int) {
           stringstream err;
-          err << "Expected $limit to be an integer but got " << v << " for `random'";
+          err << "Expected $limit to be an integer but got " << lv << " for `random'";
           error(err.str(), pstate);
         }
-        std::uniform_real_distribution<> distributor(1, v + 1);
+        std::uniform_real_distribution<> distributor(1, lv + 1);
         uint_fast32_t distributed = static_cast<uint_fast32_t>(distributor(rand));
         return SASS_MEMORY_NEW(Number, pstate, (double)distributed);
       }
@@ -1214,7 +1309,6 @@ namespace Sass {
       } else {
         throw Exception::InvalidArgumentType(pstate, "random", "$limit", "number");
       }
-      return 0;
     }
 
     /////////////////
@@ -1301,7 +1395,7 @@ namespace Sass {
         l->append(ARG("$list", Expression));
       }
       if (m) {
-        l = m->to_list(ctx, pstate);
+        l = m->to_list(pstate);
       }
       if (l->empty()) error("argument `$list` of `" + std::string(sig) + "` must not be empty", pstate);
       double index = std::floor(n->value() < 0 ? l->length() + n->value() : n->value() - 1);
@@ -1324,7 +1418,7 @@ namespace Sass {
         l->append(ARG("$list", Expression));
       }
       if (m) {
-        l = m->to_list(ctx, pstate);
+        l = m->to_list(pstate);
       }
       for (size_t i = 0, L = l->length(); i < L; ++i) {
         if (Eval::eq(l->value_at_index(i), v)) return SASS_MEMORY_NEW(Number, pstate, (double)(i+1));
@@ -1354,11 +1448,11 @@ namespace Sass {
         l2->append(ARG("$list2", Expression));
       }
       if (m1) {
-        l1 = m1->to_list(ctx, pstate);
+        l1 = m1->to_list(pstate);
         sep_val = SASS_COMMA;
       }
       if (m2) {
-        l2 = m2->to_list(ctx, pstate);
+        l2 = m2->to_list(pstate);
       }
       size_t len = l1->length() + l2->length();
       std::string sep_str = unquote(sep->value());
@@ -1392,7 +1486,7 @@ namespace Sass {
         l->append(ARG("$list", Expression));
       }
       if (m) {
-        l = m->to_list(ctx, pstate);
+        l = m->to_list(pstate);
       }
       List_Ptr result = SASS_MEMORY_COPY(l);
       std::string sep_str(unquote(sep->value()));
@@ -1425,7 +1519,7 @@ namespace Sass {
         Map_Obj mith = Cast<Map>(arglist->value_at_index(i));
         if (!ith) {
           if (mith) {
-            ith = mith->to_list(ctx, pstate);
+            ith = mith->to_list(pstate);
           } else {
             ith = SASS_MEMORY_NEW(List, pstate, 1);
             ith->append(arglist->value_at_index(i));
@@ -1477,7 +1571,9 @@ namespace Sass {
       Expression_Obj v = ARG("$key", Expression);
       try {
         Expression_Obj val = m->at(v);
-        return val ? val.detach() : SASS_MEMORY_NEW(Null, pstate);
+        if (!val) return SASS_MEMORY_NEW(Null, pstate);
+        val->set_delayed(false);
+        return val.detach();
       } catch (const std::out_of_range&) {
         return SASS_MEMORY_NEW(Null, pstate);
       }
@@ -1793,7 +1889,7 @@ namespace Sass {
         Selector_List_Obj child = *itr;
         std::vector<Complex_Selector_Obj> exploded;
         selector_stack.push_back(result);
-        Selector_List_Obj rv = child->resolve_parent_refs(ctx, selector_stack);
+        Selector_List_Obj rv = child->resolve_parent_refs(selector_stack);
         selector_stack.pop_back();
         for (size_t m = 0, mLen = rv->length(); m < mLen; ++m) {
           exploded.push_back((*rv)[m]);
@@ -1905,7 +2001,7 @@ namespace Sass {
       Selector_List_Obj selector1 = ARGSEL("$selector1", Selector_List_Obj, p_contextualize);
       Selector_List_Obj selector2 = ARGSEL("$selector2", Selector_List_Obj, p_contextualize);
 
-      Selector_List_Obj result = selector1->unify_with(selector2, ctx);
+      Selector_List_Obj result = selector1->unify_with(selector2);
       Listize listize;
       return result->perform(&listize);
     }
@@ -1935,9 +2031,10 @@ namespace Sass {
       Selector_List_Obj  extender = ARGSEL("$extender", Selector_List_Obj, p_contextualize);
 
       Subset_Map subset_map;
-      extender->populate_extends(extendee, ctx, subset_map);
+      extender->populate_extends(extendee, subset_map);
+      Extend extend(subset_map);
 
-      Selector_List_Obj result = Extend::extendSelectorList(selector, ctx, subset_map, false);
+      Selector_List_Obj result = extend.extendSelectorList(selector, false);
 
       Listize listize;
       return result->perform(&listize);
@@ -1950,9 +2047,10 @@ namespace Sass {
       Selector_List_Obj original = ARGSEL("$original", Selector_List_Obj, p_contextualize);
       Selector_List_Obj replacement = ARGSEL("$replacement", Selector_List_Obj, p_contextualize);
       Subset_Map subset_map;
-      replacement->populate_extends(original, ctx, subset_map);
+      replacement->populate_extends(original, subset_map);
+      Extend extend(subset_map);
 
-      Selector_List_Obj result = Extend::extendSelectorList(selector, ctx, subset_map, true);
+      Selector_List_Obj result = extend.extendSelectorList(selector, true);
 
       Listize listize;
       return result->perform(&listize);
@@ -1992,6 +2090,15 @@ namespace Sass {
       Value_Obj value = ARG("$list", Value);
       List_Obj list = Cast<List>(value);
       return SASS_MEMORY_NEW(Boolean, pstate, list && list->is_bracketed());
+    }
+
+    Signature content_exists_sig = "content-exists()";
+    BUILT_IN(content_exists)
+    {
+      if (!d_env.has_global("is_in_mixin")) {
+        error("Cannot call content-exists() except within a mixin.", pstate, backtrace);
+      }
+      return SASS_MEMORY_NEW(Boolean, pstate, d_env.has_lexical("@content[m]"));
     }
   }
 }
